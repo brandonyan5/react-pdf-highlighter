@@ -13,7 +13,6 @@ interface Props {
   onMouseOver?: () => void;
   onMouseOut?: () => void;
   comment: {
-    emoji: string;
     text: string;
   };
   isScrolledTo: boolean;
@@ -26,27 +25,15 @@ export class Highlight extends Component<Props> {
       onClick,
       onMouseOver,
       onMouseOut,
-      comment,
       isScrolledTo,
     } = this.props;
 
-    const { rects, boundingRect } = position;
+    const { rects } = position;
 
     return (
       <div
         className={`Highlight ${isScrolledTo ? "Highlight--scrolledTo" : ""}`}
       >
-        {comment ? (
-          <div
-            className="Highlight__emoji"
-            style={{
-              left: 20,
-              top: boundingRect.top,
-            }}
-          >
-            {comment.emoji}
-          </div>
-        ) : null}
         <div className="Highlight__parts">
           {rects.map((rect, index) => (
             <div
