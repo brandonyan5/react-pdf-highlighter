@@ -418,9 +418,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
 
   onDocumentReady = () => {
     const { scrollRef } = this.props;
-
     this.handleScaleValue();
-
     scrollRef(this.scrollTo, this.scrollToPage);
   };
 
@@ -466,7 +464,6 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
       },
       () => this.renderHighlightLayers()
     );
-
   };
 
   onMouseDown: PointerEventHandler = (event) => {
