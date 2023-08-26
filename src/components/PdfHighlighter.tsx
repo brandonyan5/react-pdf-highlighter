@@ -69,8 +69,8 @@ interface Props<T_HT> {
     isScrolledTo: boolean
   ) => JSX.Element;
   highlights: Array<T_HT>;
-  onScrollChange: () => void;
-  scrollRef: (scrollTo: (highlight: T_HT) => void) => void;
+  onScrollChange: (currentPageNumber: number) => void;
+  scrollRef: (scrollTo: (highlight: T_HT) => void, scrollToPage: (pageNumber: number) => void) => void;
   pdfDocument: PDFDocumentProxy;
   pdfScaleValue: string;
   onSelectionFinished: (
@@ -129,6 +129,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
 
   componentDidMount() {
     this.init();
+    this.viewer.container.addEventListener("scroll", this.onScroll);
   }
 
   attachRef = () => {
@@ -193,6 +194,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
   }
 
   componentWillUnmount() {
+    this.viewer.container.removeEventListener("scroll", this.onScroll);
     this.unsubscribe();
   }
 
@@ -407,12 +409,19 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
     }, 100);
   };
 
+  scrollToPage = (pageNumber: number) => {
+    const pageNumberInt = parseInt(pageNumber.toString());
+    this.viewer.scrollPageIntoView({
+      pageNumber: pageNumberInt
+    });
+  };
+
   onDocumentReady = () => {
     const { scrollRef } = this.props;
 
     this.handleScaleValue();
 
-    scrollRef(this.scrollTo);
+    scrollRef(this.scrollTo, this.scrollToPage);
   };
 
   onSelectionChange = () => {
@@ -448,8 +457,8 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
 
   onScroll = () => {
     const { onScrollChange } = this.props;
-
-    onScrollChange();
+    const currentPageNumber = this.viewer.currentPageNumber;
+    onScrollChange(currentPageNumber);
 
     this.setState(
       {
@@ -458,7 +467,6 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
       () => this.renderHighlightLayers()
     );
 
-    this.viewer.container.removeEventListener("scroll", this.onScroll);
   };
 
   onMouseDown: PointerEventHandler = (event) => {
