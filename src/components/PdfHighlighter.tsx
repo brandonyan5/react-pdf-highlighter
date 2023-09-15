@@ -73,6 +73,7 @@ interface Props<T_HT> {
   scrollRef: (scrollTo: (highlight: T_HT) => void, scrollToPage: (pageNumber: number) => void) => void;
   pdfDocument: PDFDocumentProxy;
   pdfScaleValue: string;
+  zoomLevel?: number;
   onSelectionFinished: (
     position: ScaledPosition,
     content: { text?: string; image?: string },
@@ -129,6 +130,9 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
 
   componentDidMount() {
     this.init();
+    if (this.props.zoomLevel) {
+      this.viewer.currentScale = this.props.zoomLevel;
+    }
     this.viewer.container.addEventListener("scroll", this.onScroll);
   }
 
@@ -167,6 +171,9 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
     }
     if (prevProps.highlights !== this.props.highlights) {
       this.renderHighlightLayers();
+    }
+    if (prevProps.zoomLevel !== this.props.zoomLevel && this.props.zoomLevel) {
+      this.viewer.currentScale = this.props.zoomLevel;
     }
   }
 
@@ -545,8 +552,9 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
   }
 
   handleScaleValue = () => {
-    if (this.viewer) {
-      this.viewer.currentScaleValue = this.props.pdfScaleValue; //"page-width";
+    if (this.viewer && this.props.zoomLevel) {
+      // this.viewer.currentScaleValue = this.props.pdfScaleValue; //"page-width";
+      this.viewer.currentScale = this.props.zoomLevel;
     }
   };
 
