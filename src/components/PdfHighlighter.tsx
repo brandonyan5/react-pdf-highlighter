@@ -35,6 +35,11 @@ import getAreaAsPng from "../lib/get-area-as-png";
 import getBoundingRect from "../lib/get-bounding-rect";
 import getClientRects from "../lib/get-client-rects";
 import { HighlightLayer } from "./HighlightLayer";
+import {
+  findTextMatch,
+  extractTextFromLayer,
+  createRangeFromMatch,
+} from "../lib/text-search";
 
 export type T_ViewportHighlight<T_HT> = { position: Position } & T_HT;
 
@@ -53,6 +58,12 @@ interface State<T_HT> {
   tipChildren: JSX.Element | null;
   isAreaSelectionInProgress: boolean;
   scrolledToHighlightId: string;
+  citationHighlight: {
+    id: string;
+    position: ScaledPosition;
+    content: { text?: string; image?: string };
+    comment: { text: string; emoji: string };
+  } | null;
 }
 
 interface Props<T_HT> {
@@ -70,7 +81,16 @@ interface Props<T_HT> {
   ) => JSX.Element;
   highlights: Array<T_HT>;
   onScrollChange: (currentPageNumber: number) => void;
-  scrollRef: (scrollTo: (highlight: T_HT) => void, scrollToPage: (pageNumber: number) => void) => void;
+  scrollRef: (
+    scrollTo: (highlight: T_HT) => void,
+    scrollToPage: (pageNumber: number) => void,
+    searchAndHighlight: (
+      searchText: string,
+      pageNumber: number,
+      options?: { threshold?: number }
+    ) => Promise<IHighlight | null>,
+    clearCitationHighlight: () => void
+  ) => void;
   pdfDocument: PDFDocumentProxy;
   pdfScaleValue: string;
   zoomLevel?: number;
@@ -102,6 +122,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
     tip: null,
     tipPosition: null,
     tipChildren: null,
+    citationHighlight: null,
   };
 
   eventBus = new EventBus();
@@ -221,9 +242,9 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
   groupHighlightsByPage(highlights: Array<T_HT>): {
     [pageNumber: string]: Array<T_HT>;
   } {
-    const { ghostHighlight } = this.state;
+    const { ghostHighlight, citationHighlight } = this.state;
 
-    const allHighlights = [...highlights, ghostHighlight].filter(Boolean);
+    const allHighlights = [...highlights, ghostHighlight, citationHighlight].filter(Boolean);
 
     const pageNumbers = new Set<number>();
     for (const highlight of allHighlights) {
@@ -423,10 +444,116 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
     });
   };
 
+  waitForTextLayer = (pageNumber: number): Promise<HTMLElement | null> => {
+    const getTextLayerDiv = (): HTMLElement | null => {
+      const pageView = this.viewer.getPageView(pageNumber - 1);
+      return pageView?.textLayer?.textLayerDiv || null;
+    };
+
+    const div = getTextLayerDiv();
+    if (div) return Promise.resolve(div);
+
+    return new Promise((resolve) => {
+      const handler = () => {
+        const div = getTextLayerDiv();
+        if (div) {
+          this.eventBus.off("textlayerrendered", handler);
+          resolve(div);
+        }
+      };
+      this.eventBus.on("textlayerrendered", handler);
+
+      // Safety timeout to avoid hanging indefinitely
+      setTimeout(() => {
+        this.eventBus.off("textlayerrendered", handler);
+        resolve(getTextLayerDiv());
+      }, 5000);
+    });
+  };
+
+  searchAndHighlight = async (
+    searchText: string,
+    pageNumber: number,
+    options?: { threshold?: number }
+  ): Promise<IHighlight | null> => {
+    const threshold = options?.threshold ?? 0.7;
+
+    // Clear any existing citation highlight
+    this.clearCitationHighlight();
+
+    // Scroll to the page to trigger rendering
+    this.scrollToPage(pageNumber);
+
+    // Wait for the text layer to be rendered
+    const textLayerDiv = await this.waitForTextLayer(pageNumber);
+    if (!textLayerDiv) return null;
+
+    // Extract text and find the match
+    const pageText = extractTextFromLayer(textLayerDiv);
+    const match = findTextMatch(searchText, pageText, threshold);
+    if (!match) return null;
+
+    // Create a DOM Range over the matched text
+    const range = createRangeFromMatch(textLayerDiv, match.start, match.end);
+    if (!range) return null;
+
+    // Use the existing pipeline to get highlight rects
+    const pages = getPagesFromRange(range);
+    if (!pages.length) return null;
+
+    const rects = getClientRects(range, pages);
+    if (!rects.length) return null;
+
+    const boundingRect = getBoundingRect(rects);
+    const viewportPosition: Position = {
+      boundingRect,
+      rects,
+      pageNumber: pages[0].number,
+    };
+    const scaledPosition = this.viewportPositionToScaled(viewportPosition);
+
+    // Build the highlight object
+    const highlight: IHighlight = {
+      id: `citation-${Date.now()}`,
+      position: scaledPosition,
+      content: { text: searchText },
+      comment: { text: "", emoji: "" },
+    };
+
+    // Set as citation highlight and mark as scrolled-to
+    this.setState(
+      {
+        citationHighlight: highlight,
+        scrolledToHighlightId: highlight.id,
+      },
+      () => this.renderHighlightLayers()
+    );
+
+    // Scroll to the highlight
+    this.scrollTo(highlight as unknown as T_HT);
+
+    // Clear any browser text selection we may have created
+    const selection = getWindow(this.containerNode).getSelection();
+    if (selection) selection.removeAllRanges();
+
+    return highlight;
+  };
+
+  clearCitationHighlight = () => {
+    this.setState({ citationHighlight: null }, () =>
+      this.renderHighlightLayers()
+    );
+  };
+
   onDocumentReady = () => {
     const { scrollRef } = this.props;
     this.handleScaleValue();
-    scrollRef(this.scrollTo, this.scrollToPage);
+    scrollRef(
+      this.scrollTo,
+      this.scrollToPage,
+      this.searchAndHighlight,
+      this.clearCitationHighlight
+    );
   };
 
   onSelectionChange = () => {
