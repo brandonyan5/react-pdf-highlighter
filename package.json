@@ -1,6 +1,6 @@
 {
   "name": "@brandonyan5/react-pdf-highlighter",
-  "version": "7.0.0",
+  "version": "7.0.1",
   "description": "Set of React components for PDF annotation",
   "author": "Artem Tyurin <artem.tyurin@gmail.com>",
   "license": "MIT",

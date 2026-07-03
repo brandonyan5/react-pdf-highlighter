@@ -200,6 +200,11 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
     // imported lazily to keep this component importable during SSR.
     const pdfjs = await import("pdfjs-dist/legacy/web/pdf_viewer.mjs");
 
+    // The component may have unmounted while the import was in flight.
+    if (!this.containerNodeRef.current) {
+      return;
+    }
+
     if (!this.eventBus) {
       this.eventBus = new pdfjs.EventBus();
       this.linkService = new pdfjs.PDFLinkService({
@@ -788,6 +793,11 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
   }
 
   private renderHighlightLayers() {
+    // The viewer is created asynchronously in init(), so prop updates
+    // (e.g. highlights from the store) can arrive before it exists.
+    if (!this.viewer) {
+      return;
+    }
     const { pdfDocument } = this.props;
     for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
       const highlightRoot = this.highlightRoots[pageNumber];
