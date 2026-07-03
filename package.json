@@ -1,6 +1,6 @@
 {
   "name": "@brandonyan5/react-pdf-highlighter",
-  "version": "6.1.2",
+  "version": "7.0.0",
   "description": "Set of React components for PDF annotation",
   "author": "Artem Tyurin <artem.tyurin@gmail.com>",
   "license": "MIT",
@@ -14,15 +14,15 @@
     "dist"
   ],
   "types": "./dist/esm/index.d.ts",
-  "main": "./dist/cjs/index.js",
+  "main": "./dist/esm/index.js",
   "module": "./dist/esm/index.js",
   "scripts": {
     "start": "npm run dev",
     "dev": "(cd ./example && vite)",
-    "build": "npm run clean && npm run build:esm && npm run build:cjs && npm run build:copy-styles",
+    "build": "npm run clean && npm run build:esm && npm run build:copy-styles",
+    "prepublishOnly": "npm run build",
     "build:esm": "tsc",
-    "build:cjs": "tsc --module commonjs --outDir ./dist/cjs",
-    "build:copy-styles": "cp -r ./src/style ./dist/esm; cp -r ./src/style ./dist/cjs",
+    "build:copy-styles": "cp -r ./src/style ./dist/esm",
     "test": "tsc && npm run format:check && npm run test:integration",
     "test:integration": "BROWSER=none jest --maxWorkers=1 -c jest.config.js",
     "format": "prettier --write './**/*.{js,ts,tsx}'",
@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "lodash.debounce": "^4.0.8",
-    "pdfjs-dist": "2.16.105",
+    "pdfjs-dist": "4.4.168",
     "react-rnd": "^10.1.10"
   },
   "repository": {

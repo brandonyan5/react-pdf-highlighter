@@ -2,12 +2,11 @@ import "pdfjs-dist/web/pdf_viewer.css";
 import "../style/pdf_viewer.css";
 import "../style/PdfHighlighter.css";
 
-import {
+import type {
   EventBus,
-  NullL10n,
   PDFLinkService,
   PDFViewer,
-} from "pdfjs-dist/legacy/web/pdf_viewer";
+} from "pdfjs-dist/legacy/web/pdf_viewer.mjs";
 import type {
   IHighlight,
   LTWH,
@@ -125,11 +124,8 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
     citationHighlight: null,
   };
 
-  eventBus = new EventBus();
-  linkService = new PDFLinkService({
-    eventBus: this.eventBus,
-    externalLinkTarget: 2,
-  });
+  eventBus!: EventBus;
+  linkService!: PDFLinkService;
 
   viewer!: PDFViewer;
 
@@ -151,10 +147,6 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
 
   componentDidMount() {
     this.init();
-    if (this.props.zoomLevel) {
-      this.viewer.currentScale = this.props.zoomLevel;
-    }
-    this.viewer.container.addEventListener("scroll", this.onScroll);
   }
 
   attachRef = () => {
@@ -193,36 +185,61 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
     if (prevProps.highlights !== this.props.highlights) {
       this.renderHighlightLayers();
     }
-    if (prevProps.zoomLevel !== this.props.zoomLevel && this.props.zoomLevel) {
+    if (
+      prevProps.zoomLevel !== this.props.zoomLevel &&
+      this.props.zoomLevel &&
+      this.viewer
+    ) {
       this.viewer.currentScale = this.props.zoomLevel;
     }
   }
 
-  init() {
+  async init() {
     const { pdfDocument } = this.props;
-    this.attachRef();
+    // pdf_viewer.mjs touches browser globals at module scope, so it must be
+    // imported lazily to keep this component importable during SSR.
+    const pdfjs = await import("pdfjs-dist/legacy/web/pdf_viewer.mjs");
+
+    if (!this.eventBus) {
+      this.eventBus = new pdfjs.EventBus();
+      this.linkService = new pdfjs.PDFLinkService({
+        eventBus: this.eventBus,
+        externalLinkTarget: 2,
+      });
+    }
 
     this.viewer =
       this.viewer ||
-      new PDFViewer({
+      new pdfjs.PDFViewer({
         container: this.containerNodeRef!.current!,
         eventBus: this.eventBus,
-        // enhanceTextSelection: true, // deprecated. https://github.com/mozilla/pdf.js/issues/9943#issuecomment-409369485
-        textLayerMode: 2,
+        // In pdf.js >= 3, mode 2 no longer means "enhanced selection"; it
+        // enforces PDF copy permissions, which would disable text selection
+        // on protected documents.
+        textLayerMode: 1,
         removePageBorders: true,
         linkService: this.linkService,
-        l10n: NullL10n,
       });
 
     this.linkService.setDocument(pdfDocument);
     this.linkService.setViewer(this.viewer);
     this.viewer.setDocument(pdfDocument);
+
+    this.attachRef();
+
+    if (this.props.zoomLevel) {
+      this.viewer.currentScale = this.props.zoomLevel;
+    }
+    this.viewer.container.addEventListener("scroll", this.onScroll);
+
     // debug
     (window as any).PdfViewer = this;
   }
 
   componentWillUnmount() {
-    this.viewer.container.removeEventListener("scroll", this.onScroll);
+    if (this.viewer) {
+      this.viewer.container.removeEventListener("scroll", this.onScroll);
+    }
     this.unsubscribe();
   }
 
@@ -234,7 +251,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
     }
 
     return findOrCreateContainerLayer(
-      textLayer.textLayerDiv,
+      textLayer.div,
       "PdfHighlighter__highlight-layer"
     );
   }
@@ -447,7 +464,7 @@ export class PdfHighlighter<T_HT extends IHighlight> extends PureComponent<
   waitForTextLayer = (pageNumber: number): Promise<HTMLElement | null> => {
     const getTextLayerDiv = (): HTMLElement | null => {
       const pageView = this.viewer.getPageView(pageNumber - 1);
-      return pageView?.textLayer?.textLayerDiv || null;
+      return pageView?.textLayer?.div || null;
     };
 
     const div = getTextLayerDiv();
